@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub File & Workflow Manager</title>
+    <title>Secure GitHub Manager</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 500px; margin: 50px auto; padding: 20px; }
         .form-group { margin-bottom: 15px; }
@@ -35,90 +35,61 @@
     <div id="status"></div>
 
     <script>
-        // --- CONFIGURATION ---
-        const GITHUB_TOKEN = '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'; // Replace with your token
-        const OWNER = 'bergham123';                 // Replace with owner
-        const REPO = 'whatsapp';                    // Replace with repo name
-        const FILE_PATH = 'message.txt';            // File to save data in
-        const WORKFLOW_ID = 'send.yaml';             // Name of your workflow file in .github/workflows/
-        const BRANCH = 'main';                      // Branch to commit to
-
         const statusText = document.getElementById('status');
 
         function setStatus(message) {
             statusText.innerText = message;
         }
 
-        // 1. Function to save inputs to a file in the repo
+        // 1. Function to save inputs to a file via Cloudflare Function
         async function saveToFile() {
-            setStatus("Saving to GitHub...");
+            setStatus("Saving to GitHub securely...");
             const val1 = document.getElementById('input1').value;
             const val2 = document.getElementById('input2').value;
             const content = `Input 1: ${val1}\nInput 2: ${val2}`;
             
-            // GitHub API requires content to be Base64 encoded
+            // Base64 encode the content
             const encodedContent = btoa(content);
 
             try {
-                // Step A: Get the current file SHA (required to update an existing file)
-                let sha = null;
-                const getFileRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`, {
-                    method: 'GET',
-                    headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
-                });
-
-                if (getFileRes.ok) {
-                    const fileData = await getFileRes.json();
-                    sha = fileData.sha; // File exists, we need the SHA to overwrite it
-                }
-
-                // Step B: Create or Update the file
-                const updateRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'Accept': 'application/vnd.github.v3+json'
-                    },
+                // Call the Cloudflare Function endpoint
+                const res = await fetch('/api/github', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        message: `Update data via Web UI`,
-                        content: encodedContent,
-                        sha: sha, // If null, GitHub creates a new file. If valid, it updates.
-                        branch: BRANCH
+                        action: 'save',
+                        content: encodedContent
                     })
                 });
 
-                if (updateRes.ok) {
+                if (res.ok) {
                     setStatus("✅ Successfully saved to repository!");
                 } else {
-                    const errorData = await updateRes.json();
-                    throw new Error(errorData.message);
+                    const errorData = await res.json();
+                    throw new Error(errorData.error || "Failed to save");
                 }
-
             } catch (error) {
                 setStatus(`❌ Error saving: ${error.message}`);
             }
         }
 
-        // 2. Function to trigger a GitHub Actions workflow
+        // 2. Function to trigger workflow via Cloudflare Function
         async function runWorkflow() {
-            setStatus("Triggering workflow...");
+            setStatus("Triggering workflow securely...");
             try {
-                const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW_ID}/dispatches`, {
+                const res = await fetch('/api/github', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'Accept': 'application/vnd.github.v3+json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        ref: BRANCH // The branch to run the workflow on
+                        action: 'run'
                     })
                 });
 
-                if (res.status === 204) { // 204 No Content is the success code for workflow dispatch
+                if (res.status === 204 || res.ok) {
                     setStatus("✅ Workflow triggered successfully! Check your Actions tab.");
                 } else {
                     const errorData = await res.json();
-                    throw new Error(errorData.message);
+                    throw new Error(errorData.error || "Failed to run workflow");
                 }
             } catch (error) {
                 setStatus(`❌ Error running workflow: ${error.message}`);
