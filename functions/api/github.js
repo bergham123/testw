@@ -1,29 +1,29 @@
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+    const { request, env } = context;
+
     try {
-        // Read the secure environment variables from Cloudflare
         const GITHUB_TOKEN = env.GITHUB_TOKEN;
         const OWNER = env.GITHUB_OWNER;
         const REPO = env.GITHUB_REPO;
         const WORKFLOW_ID = env.GITHUB_WORKFLOW;
-        const FILE_PATH = 'message.txt'; // File to save data in
-        const BRANCH = 'main';           // Branch to commit to
+        const FILE_PATH = 'message.txt';
+        const BRANCH = 'main';
 
-        if (!GITHUB_TOKEN || !OWNER || !REPO) {
-            return new Response(JSON.stringify({ error: "Server missing environment variables" }), { status: 500 });
+        if (!GITHUB_TOKEN || !OWNER || !REPO || !WORKFLOW_ID) {
+            return new Response(JSON.stringify({ error: "Server missing environment variables. Check Cloudflare Settings." }), { 
+                status: 500, 
+                headers: { 'Content-Type': 'application/json' } 
+            });
         }
 
         const data = await request.json();
 
-        // ---------------------------------------------------------
         // ACTION: SAVE FILE
-        // ---------------------------------------------------------
         if (data.action === 'save') {
-            
-            // Step A: Get the current file SHA (to overwrite it)
             let sha = null;
             const getFileRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`, {
                 method: 'GET',
-                headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+                headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github.v3+json' }
             });
 
             if (getFileRes.ok) {
@@ -31,7 +31,6 @@ export async function onRequestPost({ request, env }) {
                 sha = fileData.sha;
             }
 
-            // Step B: Update or Create the file
             const updateRes = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${FILE_PATH}`, {
                 method: 'PUT',
                 headers: {
@@ -47,16 +46,20 @@ export async function onRequestPost({ request, env }) {
             });
 
             if (!updateRes.ok) {
-                const errData = await updateRes.json();
-                return new Response(JSON.stringify({ error: errData.message }), { status: updateRes.status });
+                const errData = await updateRes.json().catch(() => ({}));
+                return new Response(JSON.stringify({ error: errData.message || "GitHub API Error on Save" }), { 
+                    status: updateRes.status, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
             }
 
-            return new Response(JSON.stringify({ success: true }), { status: 200 });
+            return new Response(JSON.stringify({ success: true }), { 
+                status: 200, 
+                headers: { 'Content-Type': 'application/json' } 
+            });
         }
 
-        // ---------------------------------------------------------
         // ACTION: RUN WORKFLOW
-        // ---------------------------------------------------------
         else if (data.action === 'run') {
             const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW_ID}/dispatches`, {
                 method: 'POST',
@@ -70,16 +73,25 @@ export async function onRequestPost({ request, env }) {
             });
 
             if (res.status === 204) {
-                return new Response(null, { status: 204 }); // Success
+                return new Response(null, { status: 204 });
             } else {
-                const errData = await res.json();
-                return new Response(JSON.stringify({ error: errData.message }), { status: res.status });
+                const errData = await res.json().catch(() => ({}));
+                return new Response(JSON.stringify({ error: errData.message || "GitHub API Error on Run" }), { 
+                    status: res.status, 
+                    headers: { 'Content-Type': 'application/json' } 
+                });
             }
         }
 
-        return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400 });
+        return new Response(JSON.stringify({ error: "Invalid action specified" }), { 
+            status: 400, 
+            headers: { 'Content-Type': 'application/json' } 
+        });
 
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+        return new Response(JSON.stringify({ error: "Internal Function Error: " + error.message }), { 
+            status: 500, 
+            headers: { 'Content-Type': 'application/json' } 
+        });
     }
 }
