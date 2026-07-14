@@ -1,0 +1,8 @@
+name: CI
+on:
+  workflow_dispatch:  # <--- THIS IS REQUIRED TO TRIGGER VIA API
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Workflow ran!"
