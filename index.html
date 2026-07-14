@@ -41,6 +41,24 @@
             statusText.innerText = message;
         }
 
+        // Helper function to safely handle responses
+        async function handleResponse(res) {
+            const text = await res.text();
+            let errorMessage = text || "Unknown server error";
+            
+            try {
+                const errorData = JSON.parse(text);
+                if (errorData.error) errorMessage = errorData.error;
+            } catch (e) { 
+                // It's not JSON, so we just use the raw text
+                if (text.includes("<!DOCTYPE html>")) {
+                    errorMessage = "Function not found or deployed incorrectly (404).";
+                }
+            }
+            
+            if (!res.ok) throw new Error(errorMessage);
+        }
+
         // 1. Function to save inputs to a file via Cloudflare Function
         async function saveToFile() {
             setStatus("Saving to GitHub securely...");
@@ -48,11 +66,9 @@
             const val2 = document.getElementById('input2').value;
             const content = `Input 1: ${val1}\nInput 2: ${val2}`;
             
-            // Base64 encode the content
             const encodedContent = btoa(content);
 
             try {
-                // Call the Cloudflare Function endpoint
                 const res = await fetch('/api/github', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -62,12 +78,8 @@
                     })
                 });
 
-                if (res.ok) {
-                    setStatus("✅ Successfully saved to repository!");
-                } else {
-                    const errorData = await res.json();
-                    throw new Error(errorData.error || "Failed to save");
-                }
+                await handleResponse(res);
+                setStatus("✅ Successfully saved to repository!");
             } catch (error) {
                 setStatus(`❌ Error saving: ${error.message}`);
             }
@@ -85,12 +97,8 @@
                     })
                 });
 
-                if (res.status === 204 || res.ok) {
-                    setStatus("✅ Workflow triggered successfully! Check your Actions tab.");
-                } else {
-                    const errorData = await res.json();
-                    throw new Error(errorData.error || "Failed to run workflow");
-                }
+                await handleResponse(res);
+                setStatus("✅ Workflow triggered successfully! Check your Actions tab.");
             } catch (error) {
                 setStatus(`❌ Error running workflow: ${error.message}`);
             }
